@@ -1,5 +1,6 @@
 playing with deepdream
 
+```
 docker pull kennydo/deepdream-docker
 
 docker run \
@@ -14,3 +15,4 @@ notebook \
 --port 8888 \
 --ip 0.0.0.0 \
 --no-browser
+```
