@@ -1,67 +1,67 @@
-FROM ubuntu:latest
-MAINTAINER Spencer Dawson "spec4d@gmail.com"
-#Forked from mrbartoli's deepdream docker image "michael.bartoli@pomona.edu"
-#Biggest change was to expose port used by iPython and launch iPython Notebook
+# Copyright 2014 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-RUN apt-get clean && apt-get update && apt-get install -y \
-	bc \
-	ca-certificates \
-	curl \
-	cython \
-	g++ \
-	git \
-	ipython \
-	ipython-notebook \
-	libatlas-base-dev \
-	libatlas-dev \
-	libboost-all-dev \
-	libgflags-dev \
-	libgoogle-glog-dev \
-	libhdf5-dev \
-	libleveldb-dev \
-	liblmdb-dev \
-	libopencv-dev \
-	libprotobuf-dev \
-	libsnappy-dev \
-	make \
-	protobuf-compiler \
-	python-dateutil \
-	python-gflags \
-	python-h5py \
-	python-leveldb \
-	python-matplotlib \
-	python-networkx \
-	python-nose \
-	python-numpy \
-	python-pandas \
-	python-pil \
-	python-protobuf \
-	python-scipy \
-	python-skimage-lib \
-	python-yaml \
-	--no-install-recommends \
-	&& rm -rf /var/lib/apt/lists/*
+FROM ubuntu:trusty
 
-RUN curl https://bootstrap.pypa.io/get-pip.py | python
+RUN mkdir /deepdream
+WORKDIR /deepdream
 
-RUN pip install scikit-image
+RUN apt-get -q update && \
+  apt-get install --no-install-recommends -y --force-yes -q \
+    build-essential \
+    ca-certificates \
+    git \
+    python python-pip \
+    python-dev libpython-dev \
+    python-numpy python-scipy python-imaging \
+    ipython ipython-notebook \
+    libprotobuf-dev libleveldb-dev libsnappy-dev libopencv-dev libhdf5-serial-dev libboost-all-dev \
+    libatlas-base-dev libgflags-dev libgoogle-glog-dev liblmdb-dev protobuf-compiler && \
+  apt-get clean && \
+  rm /var/lib/apt/lists/*_*
 
-RUN cd root && git clone --depth 1 --single-branch https://github.com/BVLC/caffe.git
+# Download and compile Caffe
+RUN git clone https://github.com/BVLC/caffe
+RUN cd caffe && \
+  cp Makefile.config.example Makefile.config && echo "CPU_ONLY := 1" >> Makefile.config && \
+  make all -j2 
+RUN pip install -U pip
+RUN pip install cython jupyter
+RUN cd caffe && \
+  pip install --requirement python/requirements.txt 
+RUN cd caffe && make pycaffe -j2
+RUN cd caffe && make distribute
+RUN cd caffe/scripts && ./download_model_binary.py ../models/bvlc_googlenet/
 
-RUN curl http://dl.caffe.berkeleyvision.org/bvlc_googlenet.caffemodel > /root/caffe/models/bvlc_googlenet/bvlc_googlenet.caffemodel
+RUN pip install protobuf && pip install tornado --upgrade
+RUN apt-get -q update && \
+  apt-get install --no-install-recommends -y --force-yes -q \
+    python-jsonschema && \
+  apt-get clean && \
+  rm /var/lib/apt/lists/*_*
 
-RUN cd /root/caffe && \
-	cp Makefile.config.example Makefile.config && \
-	sed -i 's/# CPU_ONLY/CPU_ONLY/g' Makefile.config && \
-	echo 'INCLUDE_DIRS += /usr/include/hdf5/serial' >> Makefile.config && \
-	echo 'LIBRARY_DIRS += /usr/lib/x86_64-linux-gnu/hdf5/serial' >> Makefile.config && \
-	make -j"$(nproc)" all pycaffe
-
-ENV PYTHONPATH=/root/caffe/python
-
-WORKDIR /root
 RUN git clone https://github.com/google/deepdream
-WORKDIR /root/deepdream
+
+# Uncomment to include DeepDream Video
+# RUN git clone https://github.com/graphific/DeepDreamVideo
+# RUN cd DeepDreamVideo && chmod a+x *.py
+
+ENV LD_LIBRARY_PATH=/deepdream/caffe/distribute/lib
+ENV PYTHONPATH=/deepdream/caffe/distribute/python
 
 EXPOSE 8888
-CMD ipython notebook dream.ipynb --ip='*' --no-browser
+
+ADD https://raw.githubusercontent.com/saturnism/deepdream-docker/master/start.sh start.sh
+
+CMD ["./start.sh"]
